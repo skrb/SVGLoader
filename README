@@ -1,1 +1,37 @@
 SVG file loader for JavaFX 2.0.
+
+This project is worked on NetBeans 7.1.
+
+How to run sample:
+
+> java -cp jfxrt.jar;SVGLoader.jar SVGLoaderSample
+
+
+Usage:
+
+Case 1: All contents are added to scene graph.
+
+URL url = ...;
+SVGContent content = SVGLoader.load(url);
+container.getChildren().add(content.getRoot());
+
+Case 2: a particular group is added to scene graph.
+
+URL url = ...;
+String groupId = ...;
+
+SVGContent content = SVGLoader.load(url);
+Group group = content.getGroup(groupId);
+
+container.getChildren.add(group);
+
+Case 3: a particular node is added to scene graph.
+
+URL url = ...;
+String nodeId = ...;
+
+SVGContent content = SVGLoader.load(url);
+Node node = content.getNode(nodeId);
+
+container.getChildren.add(node);
+
