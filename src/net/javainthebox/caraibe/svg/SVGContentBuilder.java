@@ -22,7 +22,16 @@ import javafx.scene.paint.LinearGradient;
 import javafx.scene.paint.Paint;
 import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
-import javafx.scene.shape.*;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Ellipse;
+import javafx.scene.shape.Line;
+import javafx.scene.shape.Polygon;
+import javafx.scene.shape.Polyline;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.shape.SVGPath;
+import javafx.scene.shape.Shape;
+import javafx.scene.shape.StrokeLineCap;
+import javafx.scene.shape.StrokeLineJoin;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.scene.transform.Affine;
@@ -33,15 +42,15 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.events.*;
 
-class SVGContentBuilder {
+public class SVGContentBuilder {
 
     private URL url;
-    private SVGContent content;
+    private SVGContent root;
     private Map<String, Paint> gradients;
 
     public SVGContentBuilder(URL url) {
         this.url = url;
-        this.content = new SVGContent();
+        this.root = new SVGContent();
 
         gradients = new HashMap<>();
     }
@@ -52,8 +61,6 @@ class SVGContentBuilder {
         factory.setProperty("javax.xml.stream.isNamespaceAware", false);
         factory.setProperty("javax.xml.stream.supportDTD", false);
 
-        Group root = new Group();
-        
         try (BufferedInputStream bufferedStream = new BufferedInputStream(url.openStream())) {
             XMLEventReader reader = factory.createXMLEventReader(bufferedStream);
 
@@ -61,9 +68,7 @@ class SVGContentBuilder {
             reader.close();
         }
 
-        content.setRoot(root);
-        
-        return content;
+        return root;
     }
 
     private void eventLoop(XMLEventReader reader, Group group) throws IOException, XMLStreamException {
@@ -130,11 +135,7 @@ class SVGContentBuilder {
 
                     Attribute idAttribute = element.getAttributeByName(new QName("id"));
                     if (idAttribute != null) {
-                        if (node instanceof Group) {
-                            content.putGroup(idAttribute.getValue(), (Group)node);
-                        } else {
-                            content.putNode(idAttribute.getValue(), node);
-                        }
+                        root.putNode(idAttribute.getValue(), node);
                     }
                     group.getChildren().add(node);
                 }
@@ -179,19 +180,19 @@ class SVGContentBuilder {
                     }
                     break;
                 case "fx":
-                    fx = Double.parseDouble(attribute.getValue());
+                    fx = Double.valueOf(attribute.getValue());
                     break;
                 case "fy":
-                    fy = Double.parseDouble(attribute.getValue());
+                    fy = Double.valueOf(attribute.getValue());
                     break;
                 case "cx":
-                    cx = Double.parseDouble(attribute.getValue());
+                    cx = Double.valueOf(attribute.getValue());
                     break;
                 case "cy":
-                    cy = Double.parseDouble(attribute.getValue());
+                    cy = Double.valueOf(attribute.getValue());
                     break;
                 case "r":
-                    r = Double.parseDouble(attribute.getValue());
+                    r = Double.valueOf(attribute.getValue());
                     break;
                 case "gradientTransform":
                     transform = extractTransform(attribute.getValue());
@@ -204,7 +205,7 @@ class SVGContentBuilder {
 
         // Stop の読み込み
         List<Stop> stops = buildStops(reader, "radialGradient");
-
+        
         if (id != null && cx != null && cy != null && r != null) {
             double fDistance = 0.0;
             double fAngle = 0.0;
@@ -217,11 +218,11 @@ class SVGContentBuilder {
                 Affine affine = (Affine) transform;
                 cx = tempCx * affine.getMxx() + tempCy * affine.getMxy() + affine.getTx();
                 cy = tempCx * affine.getMyx() + tempCy * affine.getMyy() + affine.getTy();
-
+                
                 // これは多分違う
                 r = Math.sqrt(tempR * affine.getMxx() * tempR * affine.getMxx()
-                        + tempR * affine.getMyx() * tempR * affine.getMyx());
-
+                                + tempR * affine.getMyx() * tempR * affine.getMyx());
+                
                 if (fx != null && fy != null) {
                     double tempFx = fx;
                     double tempFy = fy;
@@ -324,7 +325,8 @@ class SVGContentBuilder {
                 }
 
                 double offset = Double.NaN;
-                Color color = null;
+                String color = null;
+                double opacity = 1.0;
 
                 @SuppressWarnings("unchecked")
                 Iterator<Attribute> it = element.getAttributes();
@@ -337,10 +339,16 @@ class SVGContentBuilder {
                             break;
                         case "style":
                             String style = attribute.getValue();
-                            if (style.startsWith("stop-color:")) {
-                                color = Color.web(style.substring(11));
-                            } else {
-                                Logger.getLogger(SVGContentBuilder.class.getName()).log(Level.INFO, "LinearGradient Stop doesn''t supports: {0} [{1}]", new Object[]{attribute, element});
+                            StringTokenizer tokenizer = new StringTokenizer(style, ";");
+                            while (tokenizer.hasMoreTokens()) {
+                                String item = tokenizer.nextToken().trim();
+                                if (item.startsWith("stop-color")) {
+                                    color = item.substring(11);
+                                } else if (item.startsWith("stop-opacity")) {
+                                    opacity = Double.parseDouble(item.substring(13));
+                                } else {
+                                    Logger.getLogger(SVGContentBuilder.class.getName()).log(Level.INFO, "LinearGradient Stop doesn''t supports: {0} [{1}] ''{2}''", new Object[]{attribute, element, item});
+                                }
                             }
                             break;
                         default:
@@ -350,7 +358,8 @@ class SVGContentBuilder {
                 }
 
                 if (offset != Double.NaN && color != null) {
-                    Stop stop = new Stop(offset, color);
+                    Color colour = Color.web(color, opacity);
+                    Stop stop = new Stop(offset, colour);
                     stops.add(stop);
                 }
             }
@@ -367,7 +376,7 @@ class SVGContentBuilder {
 
         double x = 0.0;
         double y = 0.0;
-
+        
         if (xAttribute != null) {
             x = Double.parseDouble(xAttribute.getValue());
         }
@@ -425,8 +434,8 @@ class SVGContentBuilder {
             String point = tokenizer.nextToken();
 
             StringTokenizer tokenizer2 = new StringTokenizer(point, ",");
-            double x = Double.parseDouble(tokenizer2.nextToken());
-            double y = Double.parseDouble(tokenizer2.nextToken());
+            Double x = Double.valueOf(tokenizer2.nextToken());
+            Double y = Double.valueOf(tokenizer2.nextToken());
 
             polygon.getPoints().add(x);
             polygon.getPoints().add(y);
@@ -456,7 +465,7 @@ class SVGContentBuilder {
     private Shape buildPolyline(StartElement element) {
         Polyline polyline = new Polyline();
         Attribute pointsAttribute = element.getAttributeByName(new QName("points"));
-
+        
         StringTokenizer tokenizer = new StringTokenizer(pointsAttribute.getValue(), " ");
         while (tokenizer.hasMoreTokens()) {
             String points = tokenizer.nextToken();
@@ -478,9 +487,9 @@ class SVGContentBuilder {
         Font font = null;
         if (fontFamilyAttribute != null && fontSizeAttribute != null) {
             font = Font.font(fontFamilyAttribute.getValue().replace("'", ""),
-                    Double.parseDouble(fontSizeAttribute.getValue()));
+                                  Double.parseDouble(fontSizeAttribute.getValue()));
         }
-
+        
         XMLEvent event = reader.nextEvent();
         if (event.isCharacters()) {
             Text text = new Text(((Characters) event).getData());
@@ -490,7 +499,7 @@ class SVGContentBuilder {
 
             return text;
         } else {
-            throw new XMLStreamException("Illegal Element");
+            throw new XMLStreamException("Illegal Element: " + event);
         }
     }
 
@@ -511,12 +520,9 @@ class SVGContentBuilder {
                 Logger.getLogger(SVGContentBuilder.class.getName()).log(Level.SEVERE, null, ex1);
             }
         }
-        Image image = new Image(imageUrl.toString(), true);
-        ImageView view = new ImageView(image);
-        view.setFitWidth(width);
-        view.setFitHeight(height);
+        Image image = new Image(imageUrl.toString(), width, height, true, true);
 
-        return view;
+        return new ImageView(image);
     }
 
     private void setTransform(Node node, StartElement element) {
@@ -611,7 +617,6 @@ class SVGContentBuilder {
 
                 StringTokenizer tokenizer2 = new StringTokenizer(style, ":");
                 String styleName = tokenizer2.nextToken();
-                styleName = styleName.trim();
                 String styleValue = tokenizer2.nextToken();
 
                 switch (styleName) {
@@ -637,6 +642,10 @@ class SVGContentBuilder {
 
                         shape.setStrokeLineCap(linecap);
                         break;
+                    case "stroke-miterlimit":
+                        double miterLimit = Double.parseDouble(styleValue);
+                        shape.setStrokeMiterLimit(miterLimit);
+                        break;
                     case "stroke-linejoin":
                         StrokeLineJoin linejoin = StrokeLineJoin.MITER;
                         if (styleValue.equals("bevel")) {
@@ -652,13 +661,6 @@ class SVGContentBuilder {
                     case "opacity":
                         double opacity = Double.parseDouble(styleValue);
                         shape.setOpacity(opacity);
-                        break;
-                    case "stroke-dasharray":
-                        StringTokenizer tokenizer3 = new StringTokenizer(styleValue, ",");
-                        while (tokenizer3.hasMoreTokens()) {
-                            Double dashValue = Double.valueOf(tokenizer3.nextToken());
-                            shape.getStrokeDashArray().add(dashValue);
-                        }
                         break;
                     default:
                         Logger.getLogger(SVGContentBuilder.class.getName()).log(Level.INFO, "No Support Style: {0} {1}", new Object[]{style, element});

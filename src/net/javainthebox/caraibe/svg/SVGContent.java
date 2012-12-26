@@ -65,26 +65,12 @@ import javafx.scene.Node;
  * note: There are many unsupport SVG element.
  * 
  */
-public class SVGContent {
-    private Group root;
+public class SVGContent extends Group {
     private Map<String, Node> nodes = new HashMap<>();
     private Map<String, Group> groups = new HashMap<>();
     
-    void setRoot(Group root) {
-        this.root = root;
-    }
-
     void putNode(String id, Node node) {
         nodes.put(id, node);
-    }
-    
-    /**
-     * Gets the root group of SVG content.
-     * 
-     * @return root group
-     */
-    public Group getRoot() {
-        return root;
     }
 
     /**

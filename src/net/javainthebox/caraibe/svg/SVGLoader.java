@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.security.AccessControlException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.xml.stream.XMLStreamException;
@@ -27,6 +26,8 @@ public class SVGLoader {
      * @return a SVGContent object that indicates SVG content
      */
     public static SVGContent load(String url) {
+        SVGContent root = null;
+
         URL tempUrl = null;
         try {
             tempUrl = new URL(url);
@@ -35,35 +36,14 @@ public class SVGLoader {
             if (tempUrl == null) {
                 try {
                     tempUrl = new File(url).toURI().toURL();
-                    
-                    if (tempUrl == null) {
-                        Logger.getLogger(SVGLoader.class.getName()).log(Level.SEVERE, "Illegal URL: " + url);
-                        return null;
-                    }
-                } catch (AccessControlException | MalformedURLException ex1) {
+                } catch (final MalformedURLException ex1) {
                     Logger.getLogger(SVGLoader.class.getName()).log(Level.SEVERE, null, ex1);
-                    return null;
+                    return root;
                 }
             }
         }
 
-        return loadInternal(tempUrl);
-    }
-    
-    /**
-     * Load SVG file and convert it to JavaFX.
-     * 
-     * @param url The location of SVG file
-     * @return a SVGContent object that indicates SVG content
-     */
-    public static SVGContent load(URL url) {
-        return loadInternal(url);
-    }
-    
-    private static SVGContent loadInternal(URL url) {
-        SVGContent root = null;
-
-        SVGContentBuilder builder = new SVGContentBuilder(url);
+        SVGContentBuilder builder = new SVGContentBuilder(tempUrl);
         try {
             root = builder.build();
         } catch (IOException | XMLStreamException ex) {
